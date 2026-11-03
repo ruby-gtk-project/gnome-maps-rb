@@ -10,3 +10,8 @@ source "https://rubygems.org"
 
 gem "adwaita"
 gem "gtk4"
+gem "librest"
+gem "geocode-glib"
+gem "libshumate"
+gem "libgweather"
+gem "ashpd"
