@@ -17,6 +17,11 @@ module GnomeMaps
         app.signal_connect("activate") do
           window.tap do |win|
             win.content = toolbar_view
+            win.add_action(shortcuts_action)
+            win.signal_connect("close-request") do
+              remember_window_geometry
+              false
+            end
           end
 
           toolbar_view.tap do |view|
@@ -24,6 +29,7 @@ module GnomeMaps
             view.content = status_page
           end
 
+          restore_window_geometry
           window.present
         end
       end
@@ -36,7 +42,6 @@ module GnomeMaps
     def window
       @window ||= Adwaita::ApplicationWindow.new(app).tap do |win|
         win.title = "gnome-maps"
-        win.set_default_size(800, 600)
       end
     end
 
@@ -50,5 +55,44 @@ module GnomeMaps
         page.icon_name = "applications-engineering-symbolic"
       end
     end
+
+    def settings = @settings ||= Settings.new
+
+    def shortcuts_action
+      @shortcuts_action ||= Gio::SimpleAction.new("show-shortcuts").tap do |action|
+        action.signal_connect("activate") do
+          ShortcutsDialog.new.build.present(window)
+        end
+      end
+    end
+
+    private
+
+      # Restores the window size and maximized state the previous run saved,
+      # as src/settings.js backs upstream's window-size/-maximized keys.
+      def restore_window_geometry
+        size = settings.window_size
+        (size.is_a?(Array) && size.length == 2).then do |has_saved_size|
+          if has_saved_size
+            window.set_default_size(*size)
+          end
+        end
+        settings.window_maximized?.then do |maximized|
+          if maximized
+            window.maximize
+          end
+        end
+      end
+
+      def remember_window_geometry
+        settings.window_maximized = window.maximized?
+        window.maximized?.then do |maximized|
+          if maximized
+            nil
+          else
+            settings.window_size = [window.default_width, window.default_height]
+          end
+        end
+      end
   end
 end
