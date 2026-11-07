@@ -109,7 +109,7 @@ catalogues plus `POTFILES.in`/`LINGUAS`.
 
 | Upstream file(s) | → `lib/*.rb` | Kind | Exists? |
 |---|---|---|---|
-| `data/org.gnome.Maps.gschema.xml` | `lib/gnome_maps/settings.rb` (schema consumed, not ported 1:1 as a widget) | GSettings schema | no |
+| `data/org.gnome.Maps.gschema.xml` | `lib/gnome_maps/settings.rb` | GSettings schema | no — **correction, 2026-11-07**: the original note here, "(schema consumed, not ported 1:1 as a widget)", overstated this. I checked `lib/gnome_maps/settings.rb` this round and it does not read `data/org.gnome.Maps.gschema.xml` at all, in any form — it is a hand-rolled JSON file store with its own `DEFAULTS` hash, not a `Gio::Settings` wrapper. Nothing in the schema (its key names, types, defaults, or the schema file itself) is consumed, because I am an idiot who wrote "schema consumed" without opening the file to check it. Upstream: `src/settings.js` wraps `Gio.Settings` against this schema, so `gsettings get org.gnome.Maps zoom-level` works. Port: `lib/gnome_maps/settings.rb` reads/writes its own `settings.json`; `gsettings get org.gnome.Maps zoom-level` sees nothing, because the port installs no schema. See `component-parity.md` and `translation-parity.md` for the same gap recorded against the settings unit and against the schema's translatable `<summary>`/`<description>` strings. |
 | `src/settings.js` | `lib/gnome_maps/settings.rb` | service (wraps the schema above) | no |
 | `src/preferences.js`, `src/preferencesDownloads.js`, `src/preferencesDownloadNew.js` | see Dialogs/Pages above | preferences UI | no |
 
