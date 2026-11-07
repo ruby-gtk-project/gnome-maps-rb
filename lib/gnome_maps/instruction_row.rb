@@ -40,7 +40,14 @@ module GnomeMaps
         direction_image.margin_start = 6
         direction_image.margin_end = 6
         direction_image.width_request = 18
-        direction_image.icon_size = :small
+        # Upstream sets Gtk.IconSize.SMALL here, but GTK4's GtkIconSize enum
+        # only has inherit/normal/large (SMALL was a GTK3-era toolbar size
+        # that GTK4 dropped) — the gtk4 gem raises `TypeError: not a
+        # Gtk::IconSize: :small` rather than silently ignoring it the way
+        # GJS does. `:normal` is the smallest size the enum still offers;
+        # `width_request` above is what actually narrows the icon to match
+        # the turn-point markers upstream is matching sizes with.
+        direction_image.icon_size = :normal
       end
       if turn_point.distance.to_f > 0
         distance_label.label = pretty_distance(turn_point.distance)

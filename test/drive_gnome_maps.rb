@@ -158,4 +158,129 @@ GtkDriver.drive(GnomeMaps::Application.new, shots: SHOTS) do |d, app|
   end
 
   d.step("the window renders maximized") { d.shot("03-maximized") }
+
+  # The five row widgets below have no caller in application.rb yet (Route,
+  # POI search and ShapeLayer have not been ported), so nothing in the app's
+  # own wiring exercises them. They are still shipped, claimed components, so
+  # they are driven directly here: built, placed in a real ListBox inside the
+  # window so they get a real GTK allocation, and screenshotted.
+
+  TurnPoint = Struct.new(:instruction, :distance, :icon_name, :start_or_end) do
+    def start_or_end? = start_or_end
+  end
+
+  FakeFile = Struct.new(:parse_name)
+
+  ShapeLayer = Struct.new(:name, :file, :visible) do
+    def visible? = visible
+  end
+
+  d.step("a row gallery is built for the five standalone row widgets") do
+    d.define_singleton_method(:gallery_window) do
+      @gallery_window ||= Gtk::Window.new.tap do |win|
+        win.title = "row gallery"
+        win.set_default_size(360, 600)
+      end
+    end
+
+    d.define_singleton_method(:gallery_list) do
+      @gallery_list ||= Gtk::ListBox.new
+    end
+
+    d.gallery_window.child = d.gallery_list
+    d.gallery_window.present
+  end
+
+  d.step("InstructionRow renders a mid-route turn and a route endpoint") do
+    GnomeMaps::InstructionRow.new(
+      turn_point: TurnPoint.new("Turn right onto Main Street", 150, "maps-direction-turn-right-symbolic", false),
+      transportation: "car",
+    ).then do |row|
+      d.gallery_list.append(row)
+      d.check("the instruction text is set") { row.instruction_label.label == "Turn right onto Main Street" }
+      d.check("the turn icon is set") { row.direction_image.icon_name == "maps-direction-turn-right-symbolic" }
+      d.check("the distance is formatted in meters") { row.distance_label.label == "150 m" }
+    end
+
+    GnomeMaps::InstructionRow.new(
+      turn_point: TurnPoint.new("Arrive at destination", 0, "maps-point-end-symbolic", true),
+      transportation: "pedestrian",
+    ).then do |row|
+      d.gallery_list.append(row)
+      d.check("an endpoint falls back to the transportation icon") { row.direction_image.icon_name == "walking-symbolic" }
+      d.check("an endpoint narrows its icon") { row.direction_image.width_request == 18 }
+      d.check("a zero distance leaves the distance label blank") { row.distance_label.label == "" }
+    end
+
+    GnomeMaps::InstructionRow.new(
+      turn_point: TurnPoint.new("Continue for 2.4 kilometers", 2400, "maps-direction-continue-symbolic", false),
+    ).then do |row|
+      d.gallery_list.append(row)
+      d.check("a long distance is formatted in kilometers") { row.distance_label.label == "2.4 km" }
+    end
+  end
+
+  d.step("PoiCategoryRow renders a category entry") do
+    GnomeMaps::PoiCategoryRow.new(icon_name: "food-symbolic", label: "Restaurants").then do |row|
+      d.gallery_list.append(row)
+      d.check("the icon name is set") { row.icon.icon_name == "food-symbolic" }
+      d.check("the label is set") { row.category_label.label == "Restaurants" }
+      d.check("it carries the go-next disclosure icon") { row.disclosure_icon.icon_name == "go-next" }
+    end
+  end
+
+  d.step("PoiCategoryGobackRow renders the fixed back entry") do
+    GnomeMaps::PoiCategoryGobackRow.new.then do |row|
+      d.gallery_list.append(row)
+      d.check("the back icon is set") { row.icon.icon_name == "go-previous-symbolic" }
+      d.check("the fixed label reads Back to Main Categories") { row.label.label == "Back to Main Categories" }
+      d.check("it is exposed as a list item for accessibility") { row.accessible_role == :list_item }
+    end
+  end
+
+  d.step("ShapeLayerRow renders a visible layer and toggles it") do
+    ShapeLayer.new("hiking-trail.gpx", FakeFile.new("/home/user/hiking-trail.gpx"), true).then do |layer|
+      GnomeMaps::ShapeLayerRow.new(shape_layer: layer).then do |row|
+        d.gallery_list.append(row)
+        d.check("the layer name is the label") { row.layer_label.label == "hiking-trail.gpx" }
+        d.check("the tooltip is the file's parse name") { row.layer_label.tooltip_text == "/home/user/hiking-trail.gpx" }
+        d.check("a visible layer is activatable") { row.activatable? == true }
+        d.check("a visible layer shows the visible icon") { row.visible_button.icon_name == "layer-visible-symbolic" }
+
+        row.visible_button.signal_emit("clicked")
+
+        d.check("clicking the visibility button flips the model") { layer.visible? == false }
+        d.check("the row stops being activatable") { row.activatable? == false }
+        d.check("the icon swaps to not-visible") { row.visible_button.icon_name == "layer-not-visible-symbolic" }
+      end
+    end
+  end
+
+  d.step("TransitMoreRow moves through loading and exhausted states, both directions") do
+    GnomeMaps::TransitMoreRow.new(earlier: true).then do |row|
+      d.gallery_list.append(row)
+      d.check("an earlier row starts on the load-earlier label") { row.label.label == "Load earlier alternatives" }
+      d.check("earlier? reports true") { row.earlier? == true }
+
+      row.start_loading
+      d.check("loading swaps the stack to the spinner") { row.stack.visible_child_name == "spinner" }
+
+      row.show_no_more
+      d.check("exhausted swaps back to the label") { row.stack.visible_child_name == "label" }
+      d.check("exhausted relabels for no earlier alternatives") { row.label.label == "No earlier alternatives found." }
+      d.check("exhausted stops being activatable") { row.activatable? == false }
+      d.check("exhausted adds the dimmed css class") { row.label.has_css_class?("dimmed") }
+    end
+
+    GnomeMaps::TransitMoreRow.new(earlier: false).then do |row|
+      d.gallery_list.append(row)
+      d.check("a later row starts on the load-later label") { row.label.label == "Load later alternatives" }
+      d.check("earlier? reports false") { row.earlier? == false }
+
+      row.show_no_more
+      d.check("exhausted relabels for no later alternatives") { row.label.label == "No later alternatives found." }
+    end
+  end
+
+  d.step("the row gallery renders all five widgets") { d.shot("04-row-gallery", d.gallery_window) }
 end
