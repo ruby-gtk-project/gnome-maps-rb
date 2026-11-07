@@ -20,6 +20,13 @@ module GnomeMaps
             win.content = toolbar_view
             win.add_action(shortcuts_action)
             win.add_action(sign_in_action)
+            win.add_action(preferences_action)
+            win.add_action(zoom_in_action)
+            win.add_action(zoom_out_action)
+            win.add_action(reset_rotation_action)
+            win.add_action(goto_user_location_action)
+            win.add_action(show_scale_action)
+            win.add_action(show_location_marker_action)
             win.signal_connect("close-request") do
               remember_window_geometry
               false
@@ -35,7 +42,15 @@ module GnomeMaps
           header_bar.tap do |hb|
             hb.pack_start(search_toggle_button)
             hb.pack_end(sign_in_button)
+            hb.pack_end(preferences_button)
           end
+
+          map_overlay.tap do |overlay|
+            overlay.child = map_view.map
+            overlay.add_overlay(zoom_and_rotate_controls.build)
+          end
+
+          context_menu.attach
 
           search_bar.tap do |sb|
             sb.child = search_entry
@@ -55,7 +70,7 @@ module GnomeMaps
           end
 
           toast_overlay.tap do |to|
-            to.child = map_view.map
+            to.child = map_overlay
           end
 
           apply_system_color_scheme
@@ -101,9 +116,26 @@ module GnomeMaps
       end
     end
 
+    def preferences_button
+      @preferences_button ||= Gtk::Button.new.tap do |btn|
+        btn.icon_name = "settings-symbolic"
+        btn.tooltip_text = "Preferences"
+        btn.action_name = "win.show-preferences"
+      end
+    end
+
     # The map widget (MapView, backed by libshumate), as upstream's
     # src/mapView.js is the heart of mainWindow.js's content.
     def map_view = @map_view ||= MapView.new
+
+    # Hosts the map plus the floating zoom/rotate control cluster, as
+    # upstream's mainWindow.blp overlays zoomAndRotateControls on the map
+    # inside the same Gtk.Overlay the place/route bubbles also live in.
+    def map_overlay = @map_overlay ||= Gtk::Overlay.new
+
+    def zoom_and_rotate_controls = @zoom_and_rotate_controls ||= ZoomAndRotateControls.new(map_view: map_view)
+
+    def context_menu = @context_menu ||= ContextMenu.new(widget: map_view.map)
 
     def geocoder = @geocoder ||= Geocoder.new
     def osm_connection = @osm_connection ||= OsmConnection.new
@@ -124,6 +156,59 @@ module GnomeMaps
           open_osm_sign_in
         end
       end
+    end
+
+    def preferences_action
+      @preferences_action ||= Gio::SimpleAction.new("show-preferences").tap do |action|
+        action.signal_connect("activate") do
+          Preferences.new(settings: settings).build.present(window)
+        end
+      end
+    end
+
+    def zoom_in_action
+      @zoom_in_action ||= Gio::SimpleAction.new("zoom-in").tap do |action|
+        action.signal_connect("activate") { map_view.zoom_in }
+      end
+    end
+
+    def zoom_out_action
+      @zoom_out_action ||= Gio::SimpleAction.new("zoom-out").tap do |action|
+        action.signal_connect("activate") { map_view.zoom_out }
+      end
+    end
+
+    def reset_rotation_action
+      @reset_rotation_action ||= Gio::SimpleAction.new("reset-rotation").tap do |action|
+        action.signal_connect("activate") { map_view.reset_rotation }
+      end
+    end
+
+    # Disabled: "go to current location" needs the Geoclue/location-portal
+    # service (upstream's src/geoclue.js), which this round does not port —
+    # ashpd 0.1.1, the version this port's gemspec pins, has no Location
+    # portal binding yet (only Account/Camera/OpenUri/Screenshot/Settings/
+    # Trash), so there is no gem call to back this action with yet.
+    def goto_user_location_action
+      @goto_user_location_action ||= Gio::SimpleAction.new("goto-user-location").tap do |action|
+        action.enabled = false
+      end
+    end
+
+    # Stateful boolean actions backing Preferences' two SwitchRows, keeping
+    # the GAction's own state and Settings in sync in both directions, as
+    # upstream's own `setting:`-driven action entries do against GSettings.
+    def show_scale_action
+      @show_scale_action ||= Gio::SimpleAction.new("show-scale", nil, GLib::Variant.new(settings.show_scale?)).tap do |action|
+        action.signal_connect("notify::state") { settings.show_scale = action.state }
+      end
+    end
+
+    def show_location_marker_action
+      @show_location_marker_action ||=
+        Gio::SimpleAction.new("show-location-marker", nil, GLib::Variant.new(settings.show_location_marker?)).tap do |action|
+          action.signal_connect("notify::state") { settings.show_location_marker = action.state }
+        end
     end
 
     private

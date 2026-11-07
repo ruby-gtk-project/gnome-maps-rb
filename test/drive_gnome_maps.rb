@@ -46,11 +46,92 @@ GtkDriver.drive(GnomeMaps::Application.new, shots: SHOTS) do |d, app|
     d.check("the toast overlay is the toolbar view's content") do
       app.toolbar_view.content.equal?(app.toast_overlay)
     end
-    d.check("the map is the toast overlay's child") do
-      app.toast_overlay.child.equal?(app.map_view.map)
+    d.check("the map overlay is the toast overlay's child") do
+      app.toast_overlay.child.equal?(app.map_overlay)
+    end
+    d.check("the map is the map overlay's main child") do
+      app.map_overlay.child.equal?(app.map_view.map)
     end
     d.check("the map is a Shumate::SimpleMap") { app.map_view.map.is_a?(Shumate::SimpleMap) }
     d.shot("01-main")
+  end
+
+  d.step("the zoom-and-rotate controls are overlaid on the map and wired to real window actions") do
+    d.check("zoom-in is enabled and reachable from the window") do
+      app.window.lookup_action("zoom-in").equal?(app.zoom_in_action) && app.zoom_in_action.enabled?
+    end
+    d.check("zoom-out is enabled and reachable from the window") do
+      app.window.lookup_action("zoom-out").equal?(app.zoom_out_action) && app.zoom_out_action.enabled?
+    end
+    d.check("reset-rotation is enabled and reachable from the window") do
+      app.window.lookup_action("reset-rotation").equal?(app.reset_rotation_action) && app.reset_rotation_action.enabled?
+    end
+    d.check("goto-user-location is registered but disabled (no geoclue component this round)") do
+      app.window.lookup_action("goto-user-location").equal?(app.goto_user_location_action) &&
+        !app.goto_user_location_action.enabled?
+    end
+
+    before_zoom = app.map_view.viewport.zoom_level
+    app.zoom_in_action.activate(nil)
+    # go_to_full_with_duration animates the zoom over 200ms rather than
+    # applying it synchronously, so the main loop has to run for the
+    # viewport to actually reach its target.
+    GLib::MainLoop.new(nil, false).then do |loop|
+      GLib::Timeout.add(300) { loop.quit; false }
+      loop.run
+    end
+    d.check("activating win.zoom-in actually calls MapView#zoom_in") do
+      app.map_view.viewport.zoom_level > before_zoom
+    end
+
+    app.map_view.viewport.rotation = 0.7
+    d.check("rotating the viewport reveals the reset-rotation button") do
+      app.zoom_and_rotate_controls.revealer.reveal_child?
+    end
+    app.reset_rotation_action.activate(nil)
+    d.check("activating win.reset-rotation actually zeroes the viewport rotation") do
+      app.map_view.viewport.rotation == 0.0
+    end
+    d.check("resetting the rotation hides the button again") do
+      !app.zoom_and_rotate_controls.revealer.reveal_child?
+    end
+  end
+
+  d.step("the context menu is attached to the map with a real copy-location action") do
+    d.check("copy-location is enabled") { app.context_menu.action_group.lookup_action("copy-location").enabled? }
+    d.check("route-from-here is registered but disabled (no route planner this round)") do
+      !app.context_menu.action_group.lookup_action("route-from-here").enabled?
+    end
+    d.check("add-osm-location is registered but disabled (no OSM edit dialog this round)") do
+      !app.context_menu.action_group.lookup_action("add-osm-location").enabled?
+    end
+
+    app.context_menu.send(:show_at, 20, 20)
+    app.context_menu.action_group.activate_action("copy-location", nil)
+    d.check("copy-location actually writes a geo: URI to the clipboard") do
+      content = app.window.clipboard.content
+      !content.nil?
+    end
+  end
+
+  d.step("Preferences opens with switches and a measurement ComboRow bound to real Settings") do
+    app.preferences_action.activate(nil)
+    d.check("a preferences dialog is showing") { !app.window.visible_dialog.nil? }
+  end
+
+  d.step("the preferences switches are backed by real stateful window actions") do
+    d.check("show-scale starts matching Settings' saved value") do
+      app.window.lookup_action("show-scale").state == app.settings.show_scale?
+    end
+    app.show_scale_action.change_state(GLib::Variant.new(!app.settings.show_scale?))
+    d.check("toggling win.show-scale actually writes through to Settings") do
+      app.settings.show_scale? == app.show_scale_action.state
+    end
+  end
+
+  d.step("closing the preferences dialog clears the way for the remaining steps") do
+    app.window.visible_dialog&.close
+    d.check("no dialog is showing now") { app.window.visible_dialog.nil? }
   end
 
   d.step("searching recenters the map or reports why it could not") do
