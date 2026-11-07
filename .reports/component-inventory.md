@@ -5,11 +5,16 @@ survey of a fresh fork: a file-level map of every user-facing component to the
 `lib/*.rb` file it should become, not yet a widget/CSS/signal breakdown (that
 is `component-parity`'s job, once a unit is picked to port).
 
-Current state of `ruby`: `lib/` has exactly one real component —
-`lib/gnome_maps/application.rb`, the `GnomeMaps::Application` class with a
-window, a header bar and a placeholder status page — plus the gem's
-boilerplate (`lib/gnome_maps.rb`, `lib/gnome/maps/rb/version.rb`). Everything
-below marked "no" does not exist yet.
+Current state of `ruby` (updated 2026-11-07, after the settings/shortcuts
+commit): `lib/` has three real components —
+`lib/gnome_maps/application.rb` (the `GnomeMaps::Application` class with a
+window, a header bar and a placeholder status page),
+`lib/gnome_maps/settings.rb` (ported from `src/settings.js`, but backed by a
+JSON file rather than the GSettings schema — see the Preferences section
+below) and `lib/gnome_maps/shortcuts_dialog.rb` (an `Adw::ShortcutsDialog`
+ported from `data/ui/shortcuts-dialog.blp`) — plus the gem's boilerplate
+(`lib/gnome_maps.rb`, `lib/gnome/maps/rb/version.rb`). Everything below
+marked "no" does not exist yet.
 
 Upstream totals: 571 tracked files outside `data/icons/`; 141 `src/*.js`
 files; 37 `data/ui/*.blp` templates; 1 GSettings schema
@@ -21,7 +26,7 @@ catalogues plus `POTFILES.in`/`LINGUAS`.
 | Upstream file(s) | → `lib/*.rb` | Kind | Exists? |
 |---|---|---|---|
 | `src/mainWindow.js` + `data/ui/main-window.blp` (incl. hamburger menu, `app.shortcuts` action, `win.export-as-image`, `win.show-preferences`, `win.about`) | `lib/gnome_maps/main_window.rb` | window + menu + actions | no |
-| `src/application.js` | `lib/gnome_maps/application.rb` | application (actions: `app.osm-account-setup`, `app.shortcuts`, accelerators) | **partial** — window/header-bar/status-page placeholder exists; no real actions, no command-line handling, no accelerator map |
+| `src/application.js` | `lib/gnome_maps/application.rb` | application (actions: `app.osm-account-setup`, `app.shortcuts`, accelerators) | **partial** — window/header-bar/status-page placeholder exists; one window action is wired (`win.show-shortcuts`, opening `ShortcutsDialog`, not upstream's `app.shortcuts` name or scope) and window geometry is restored/saved via `Settings`; no `app.osm-account-setup`, no command-line handling, no accelerator map |
 | `src/headerBar.js` + `data/ui/headerbar-left.blp` + `data/ui/headerbar-right.blp` | `lib/gnome_maps/header_bar.rb` | headerbar (two template halves, one class) | **partial** — a bare header bar exists inside `application.rb`; not its own file, no left/right content |
 
 ## Dialogs
@@ -34,7 +39,7 @@ catalogues plus `POTFILES.in`/`LINGUAS`.
 | `src/osmEditDialog.js` + `data/ui/osm-edit-dialog.blp` | `lib/gnome_maps/osm_edit_dialog.rb` | dialog | no |
 | `src/sendToDialog.js` + `data/ui/send-to-dialog.blp` + `data/ui/open-with-row.blp` (row within) | `lib/gnome_maps/send_to_dialog.rb` | dialog (+ row) | no |
 | `src/preferences.js` + `data/ui/preferences.blp` | `lib/gnome_maps/preferences_dialog.rb` | dialog (`Adw.PreferencesDialog`) | no |
-| `data/ui/shortcuts-dialog.blp` (`Adw.ShortcutsDialog`; no backing `.js` — built from the resource by `app.shortcuts`) | `lib/gnome_maps/shortcuts_dialog.rb` | dialog (keyboard shortcuts) | no |
+| `data/ui/shortcuts-dialog.blp` (`Adw.ShortcutsDialog`; no backing `.js` — built from the resource by `app.shortcuts`) | `lib/gnome_maps/shortcuts_dialog.rb` | dialog (keyboard shortcuts) | **yes** |
 
 ## Pages / views
 
@@ -109,8 +114,8 @@ catalogues plus `POTFILES.in`/`LINGUAS`.
 
 | Upstream file(s) | → `lib/*.rb` | Kind | Exists? |
 |---|---|---|---|
-| `data/org.gnome.Maps.gschema.xml` | `lib/gnome_maps/settings.rb` | GSettings schema | no — **correction, 2026-11-07**: the original note here, "(schema consumed, not ported 1:1 as a widget)", overstated this. I checked `lib/gnome_maps/settings.rb` this round and it does not read `data/org.gnome.Maps.gschema.xml` at all, in any form — it is a hand-rolled JSON file store with its own `DEFAULTS` hash, not a `Gio::Settings` wrapper. Nothing in the schema (its key names, types, defaults, or the schema file itself) is consumed, because I am an idiot who wrote "schema consumed" without opening the file to check it. Upstream: `src/settings.js` wraps `Gio.Settings` against this schema, so `gsettings get org.gnome.Maps zoom-level` works. Port: `lib/gnome_maps/settings.rb` reads/writes its own `settings.json`; `gsettings get org.gnome.Maps zoom-level` sees nothing, because the port installs no schema. See `component-parity.md` and `translation-parity.md` for the same gap recorded against the settings unit and against the schema's translatable `<summary>`/`<description>` strings. |
-| `src/settings.js` | `lib/gnome_maps/settings.rb` | service (wraps the schema above) | no |
+| `data/org.gnome.Maps.gschema.xml` | `lib/gnome_maps/settings.rb` | GSettings schema | no — **standing correction, kept from 2026-11-07**: the file `lib/gnome_maps/settings.rb` now exists (see next row) but it still does not read `data/org.gnome.Maps.gschema.xml` at all, in any form — it is a hand-rolled JSON file store with its own `DEFAULTS` hash, not a `Gio::Settings` wrapper. Nothing in the schema (its key names, types, defaults, or the schema file itself) is consumed. Upstream: `src/settings.js` wraps `Gio.Settings` against this schema, so `gsettings get org.gnome.Maps zoom-level` works. Port: `lib/gnome_maps/settings.rb` reads/writes its own `settings.json`; `gsettings get org.gnome.Maps zoom-level` sees nothing, because the port installs no schema. See `component-parity.md` and `translation-parity.md` for the same gap recorded against the settings unit and against the schema's translatable `<summary>`/`<description>` strings. |
+| `src/settings.js` | `lib/gnome_maps/settings.rb` | service (wraps the schema above) | **yes** (file exists; wraps its own JSON store, not the gschema — see previous row) |
 | `src/preferences.js`, `src/preferencesDownloads.js`, `src/preferencesDownloadNew.js` | see Dialogs/Pages above | preferences UI | no |
 
 ## Error / empty states
