@@ -2,11 +2,11 @@
 
 require "gtk4"
 require "adwaita"
+require "ashpd"
 
 module GnomeMaps
-  # The port's application: one window, and a status page saying the port has
-  # not been written yet. Everything else grows from here — replace the status
-  # page with the real content, keep the shape.
+  # The port's application: one window holding a Shumate map (MapView) under
+  # a search bar, plus a sign-in action for editing OpenStreetMap data.
   #
   # House style (see .claude/skills/ruby-gtk): every widget is a memoized
   # method, all configuration lives in its `tap`, assembly happens only in
@@ -18,6 +18,7 @@ module GnomeMaps
           window.tap do |win|
             win.content = toolbar_view
             win.add_action(shortcuts_action)
+            win.add_action(sign_in_action)
             win.signal_connect("close-request") do
               remember_window_geometry
               false
@@ -26,9 +27,37 @@ module GnomeMaps
 
           toolbar_view.tap do |view|
             view.add_top_bar(header_bar)
-            view.content = status_page
+            view.add_top_bar(search_bar)
+            view.content = toast_overlay
           end
 
+          header_bar.tap do |hb|
+            hb.pack_start(search_toggle_button)
+            hb.pack_end(sign_in_button)
+          end
+
+          search_bar.tap do |sb|
+            sb.child = search_entry
+            sb.connect_entry(search_entry)
+          end
+
+          search_toggle_button.tap do |btn|
+            btn.signal_connect("toggled") do
+              search_bar.search_mode = btn.active?
+            end
+          end
+
+          search_entry.tap do |entry|
+            entry.signal_connect("activate") do
+              perform_search(entry.text)
+            end
+          end
+
+          toast_overlay.tap do |to|
+            to.child = map_view.map
+          end
+
+          apply_system_color_scheme
           restore_window_geometry
           window.present
         end
@@ -47,14 +76,36 @@ module GnomeMaps
 
     def toolbar_view = @toolbar_view ||= Adwaita::ToolbarView.new
     def header_bar = @header_bar ||= Adwaita::HeaderBar.new
+    def toast_overlay = @toast_overlay ||= Adwaita::ToastOverlay.new
 
-    def status_page
-      @status_page ||= Adwaita::StatusPage.new.tap do |page|
-        page.title = "gnome-maps"
-        page.description = "The Ruby port has not been written yet."
-        page.icon_name = "applications-engineering-symbolic"
+    def search_bar = @search_bar ||= Gtk::SearchBar.new
+
+    def search_entry
+      @search_entry ||= Gtk::SearchEntry.new.tap do |entry|
+        entry.placeholder_text = "Search for a place"
       end
     end
+
+    def search_toggle_button
+      @search_toggle_button ||= Gtk::ToggleButton.new.tap do |btn|
+        btn.icon_name = "system-search-symbolic"
+      end
+    end
+
+    def sign_in_button
+      @sign_in_button ||= Gtk::Button.new.tap do |btn|
+        btn.icon_name = "avatar-default-symbolic"
+        btn.tooltip_text = "Sign in to OpenStreetMap"
+        btn.action_name = "win.sign-in-osm"
+      end
+    end
+
+    # The map widget (MapView, backed by libshumate), as upstream's
+    # src/mapView.js is the heart of mainWindow.js's content.
+    def map_view = @map_view ||= MapView.new
+
+    def geocoder = @geocoder ||= Geocoder.new
+    def osm_connection = @osm_connection ||= OsmConnection.new
 
     def settings = @settings ||= Settings.new
 
@@ -66,7 +117,92 @@ module GnomeMaps
       end
     end
 
+    def sign_in_action
+      @sign_in_action ||= Gio::SimpleAction.new("sign-in-osm").tap do |action|
+        action.signal_connect("activate") do
+          open_osm_sign_in
+        end
+      end
+    end
+
     private
+
+      # Forward-geocodes the search text via GeocodeGlib::Forward (Geocoder)
+      # and recenters the map on the first result, as upstream's
+      # src/mapView.js does via its own search machinery and
+      # src/mapWalker.js's goToLocation. GeocodeGlib does a real HTTP call,
+      # so a sandbox with no network (or no TLS, as this dev shell's) takes
+      # the error branch below rather than the success one — both are real
+      # outcomes of the same call, not a stub.
+      def perform_search(query)
+        query.strip.empty?.then do |empty|
+          if empty
+            nil
+          else
+            geocoder.search(query) do |location, error|
+              if location
+                map_view.go_to(location.latitude, location.longitude)
+                toast_overlay.add_toast(Adwaita::Toast.new(search_result_message(location)))
+              else
+                toast_overlay.add_toast(Adwaita::Toast.new("Could not find “#{query}”: #{error&.message}"))
+              end
+            end
+          end
+        end
+      end
+
+      # Upstream's src/sendToDialog.js and src/utils.js both resolve a
+      # coordinate to a human place name via GWeather.Location.get_world /
+      # find_nearest_city; this does the same through the libgweather GI
+      # binding to label the location the search just found.
+      def search_result_message(location)
+        GWeather::Location.world.find_nearest_city(location.latitude, location.longitude).name.then do |city|
+          "Found near #{city}"
+        end
+      rescue => e
+        "Location found (#{e.message})"
+      end
+
+      # Opens the OpenStreetMap OAuth2 sign-in URL (OsmConnection) through
+      # the XDG desktop portal's OpenUri call, as upstream's own Xdp-based
+      # portal use (src/placeView.js) opens URIs under sandbox confinement.
+      # Ashpd::OpenUri reaches real D-Bus; without a running
+      # xdg-desktop-portal (true of this dev shell's headless sandbox) it
+      # raises
+      #   RuntimeError: Portal request failed: org.freedesktop.zbus.Error: The name is not activatable
+      # which is caught here and surfaced as a toast with the URL rather
+      # than silently discarded.
+      def open_osm_sign_in
+        url, _state = osm_connection.authorization_url
+        begin
+          Ashpd::OpenUri.open(url, false, false)
+        rescue => e
+          # Adwaita::Toast renders its text as Pango markup, so the URL's
+          # own "&"s must be escaped or GTK warns and drops the text.
+          escaped_url = url.gsub("&", "&amp;")
+          toast_overlay.add_toast(Adwaita::Toast.new("Open to sign in: #{escaped_url} (#{e.message})"))
+        end
+      end
+
+      # Reads the desktop's light/dark preference through the XDG desktop
+      # portal's Settings.color_scheme call and applies it via Adwaita's
+      # StyleManager, as upstream (GTK4/libadwaita itself) follows the same
+      # org.freedesktop.portal.Settings color-scheme signal. Same portal
+      # availability caveat as open_osm_sign_in: without a running portal
+      # this raises and Adwaita's own DEFAULT (follow the desktop) scheme is
+      # kept, which is already the correct fallback.
+      def apply_system_color_scheme
+        Ashpd::Settings.color_scheme.then do |scheme|
+          Adwaita::StyleManager.default.color_scheme =
+            if scheme == 1
+              Adwaita::ColorScheme::FORCE_DARK
+            else
+              Adwaita::ColorScheme::DEFAULT
+            end
+        end
+      rescue => e
+        warn "color-scheme portal unavailable, keeping the default scheme: #{e.message}"
+      end
 
       # Restores the window size and maximized state the previous run saved,
       # as src/settings.js backs upstream's window-size/-maximized keys.

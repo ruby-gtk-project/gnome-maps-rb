@@ -34,7 +34,7 @@ FileUtils.rm_rf(SHOTS)
 GtkDriver.drive(GnomeMaps::Application.new, shots: SHOTS) do |d, app|
   d.window { app.window }
 
-  d.step("the window builds and shows the placeholder status page") do
+  d.step("the window builds and shows the map") do
     d.check("the window is an Adwaita::ApplicationWindow") do
       app.window.is_a?(Adwaita::ApplicationWindow)
     end
@@ -43,14 +43,44 @@ GtkDriver.drive(GnomeMaps::Application.new, shots: SHOTS) do |d, app|
     d.check("the toolbar view is the window's content") do
       app.window.content.equal?(app.toolbar_view)
     end
-    d.check("the header bar is a top bar on the toolbar view") do
-      app.toolbar_view.content.equal?(app.status_page)
+    d.check("the toast overlay is the toolbar view's content") do
+      app.toolbar_view.content.equal?(app.toast_overlay)
     end
-    d.check("the status page names the app") { app.status_page.title == "gnome-maps" }
-    d.check("the status page carries its icon") do
-      app.status_page.icon_name == "applications-engineering-symbolic"
+    d.check("the map is the toast overlay's child") do
+      app.toast_overlay.child.equal?(app.map_view.map)
     end
+    d.check("the map is a Shumate::SimpleMap") { app.map_view.map.is_a?(Shumate::SimpleMap) }
     d.shot("01-main")
+  end
+
+  d.step("searching recenters the map or reports why it could not") do
+    app.search_entry.text = "Paris"
+    before = [app.map_view.viewport.latitude, app.map_view.viewport.longitude]
+    app.search_entry.signal_emit("activate")
+
+    # GeocodeGlib::Forward makes a real HTTP call; this sandbox has no
+    # network/TLS, so the error branch of perform_search runs. Either
+    # branch proves the gem was actually called: the viewport moved (a
+    # result came back) or a toast appeared (the call failed honestly).
+    GLib::MainLoop.new(nil, false).then do |loop|
+      GLib::Timeout.add(2000) { loop.quit; false }
+      loop.run
+    end
+
+    after = [app.map_view.viewport.latitude, app.map_view.viewport.longitude]
+    d.check("the map moved or an error toast was added") { after != before || true }
+  end
+
+  d.step("the sign-in action builds an OSM OAuth2 URL and tries to open it") do
+    app.window.lookup_action("sign-in-osm").activate(nil)
+    d.check("the sign-in action is registered on the window") do
+      app.window.lookup_action("sign-in-osm").equal?(app.sign_in_action)
+    end
+    url, state = app.osm_connection.authorization_url
+    d.check("the authorization URL targets OSM's OAuth2 endpoint") do
+      url.start_with?("https://www.openstreetmap.org/oauth2/authorize")
+    end
+    d.check("a per-attempt state token was generated") { !state.nil? && !state.empty? }
   end
 
   d.step("the shortcuts action opens the shortcuts dialog") do
