@@ -3,6 +3,7 @@
 require "gtk4"
 require "adwaita"
 require "ashpd"
+require "libgweather"
 
 module GnomeMaps
   # The port's application: one window holding a Shumate map (MapView) under

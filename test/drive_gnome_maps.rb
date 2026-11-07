@@ -71,6 +71,23 @@ GtkDriver.drive(GnomeMaps::Application.new, shots: SHOTS) do |d, app|
     d.check("the map moved or an error toast was added") { after != before || true }
   end
 
+  d.step("a successful search labels its result via libgweather") do
+    # perform_search's GWeather call only runs on the branch GeocodeGlib
+    # finds a match, and this sandbox has no network, so that branch never
+    # fires end-to-end above. search_result_message is exercised directly
+    # here with a real coordinate, to prove GWeather::Location.world
+    # .find_nearest_city actually runs rather than being caught by the
+    # method's own `rescue` (which previously hid a NameError: the
+    # `libgweather` require was missing from application.rb, so the
+    # constant never resolved and every call silently fell into the
+    # rescue's "Location found (...)" text instead).
+    FakeLocation = Struct.new(:latitude, :longitude)
+    message = app.send(:search_result_message, FakeLocation.new(48.8566, 2.3522))
+    d.check("the message names the nearest city, not the rescue fallback") do
+      message == "Found near Paris"
+    end
+  end
+
   d.step("the sign-in action builds an OSM OAuth2 URL and tries to open it") do
     app.window.lookup_action("sign-in-osm").activate(nil)
     d.check("the sign-in action is registered on the window") do
