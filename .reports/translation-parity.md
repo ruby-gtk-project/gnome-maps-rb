@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `main` @ `9970d8f1` |
-| Port | `ruby` @ `47d67faf` |
+| Port | `ruby` @ `c846de15` (re-confirmed this round: still no `po/` directory, no `LINGUAS`, no `.po`/`.mo`, and `grep -rn 'gettext\|bindtextdomain' lib exe` still returns nothing, across all 14 current `lib/gnome_maps/*.rb` files, up from 3 at the prior round) |
 | Domain | `gnome-maps` (`domain_source: meson project() - unconfirmed` — not cross-checked against `po/meson.build`'s `i18n.gettext()` call this round; flagged, not asserted) |
 | Upstream messages | **540** |
 | Ported | **0** |
@@ -86,6 +86,11 @@ which is 0 regardless of where the upstream total eventually settles.
 
 **0 / 540 messages, 0 / 622 occurrences, 0 / 73 languages, 0 / 29,144
 translated strings.** The port is translated into nothing. Every string any
-user will see in `gnome-maps-rb` today ("gnome-maps", the window title, the
-shortcuts-dialog section and item labels) is an untranslated literal with
-no `_()`/`gettext` marker anywhere in `lib/` or `exe/`.
+user will see in `gnome-maps-rb` today — "gnome-maps", the window title,
+the shortcuts-dialog section and item labels, and now also "Search for a
+place", "Sign in to OpenStreetMap", "Preferences" and every other string
+added in `application.rb`, `context_menu.rb`, `preferences.rb`, and
+`zoom_and_rotate_controls.rb` since the last round — is an untranslated
+literal with no `_()`/`gettext` marker anywhere in `lib/` or `exe/`. The
+gap has not narrowed as the port has grown; it has grown with it, since
+every new user-visible string lands the same way as the ones before it.

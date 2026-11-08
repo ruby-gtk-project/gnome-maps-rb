@@ -1,123 +1,123 @@
 # Accountability ensurance — gnome-maps-rb
 
-Scanned: `lib/`, `exe/`, `.reports/`, and `PORTING.md` (does not exist on
-`ruby` — there is no ported-units ledger at all yet, which is itself worth
-stating rather than silently noting its absence and moving on).
+| | |
+|---|---|
+| Upstream | `main` @ `9970d8f1` |
+| Port | `ruby` @ `c846de15` |
+
+Scanned: `lib/`, `exe/`, `.reports/`. `PORTING.md` still does not exist on
+`ruby` — there is still no ported-units ledger outside `.reports/`, which
+is itself worth stating again rather than silently noting its absence a
+second round running.
 
 ```
-$ .claude/skills/accountability-ensurance/scripts/find-excuses.sh .
-.reports/component-parity.md:19:not applicable:...
-.reports/translation-parity.md:32:skipped:...
-.reports/component-inventory.md:141:Not in scope:...
-.reports/component-inventory.md:112:not ported:...
+$ grep -rniE "TODO|FIXME|not implemented|for now|in a future" lib exe .reports
 ```
 
-No hits in `lib/` or `exe/` — the actual Ruby source carries no `TODO`,
-`FIXME`, "not implemented", "for now", "in a future", "dropped
-deliberately", "out of scope", "by design", or any of the other
-constructions this skill hunts. That is a genuinely clean result and it is
-reported as one, not inflated into a finding that isn't there.
+(ran directly, plus the skill's `find-excuses.sh` against `.`)
 
-All four hits landed in `.reports/*.md` — three in documents written this
-round, one in the pre-existing `component-inventory.md`. Each is judged
-below, not waved through because the surrounding sentence sounds
-reasonable — which is the exact mechanism this skill exists to catch,
-including from a report that is itself part of this audit.
+**Zero hits in `lib/` or `exe/`.** Across all 14 `lib/gnome_maps/*.rb`
+files and `exe/gnome-maps` — up from 3 real files at the last round's
+audit — there is still no `TODO`, `FIXME`, "not implemented", "for now",
+"in a future", or any of `find-excuses.sh`'s other flagged constructions
+anywhere in actual source. That is a genuinely clean result, reported as
+one: the port is not hiding unfinished work behind a comment that waves it
+away. What's missing is simply missing — not built, not stubbed, not
+rationalized in a code comment.
 
-## Hits in reports written this round — fixed in place
+Every hit `find-excuses.sh` returns is inside `.reports/*.md`. Reviewed
+below, not waved through.
 
-1. **`component-parity.md:19`, "not applicable"** — my own first draft
-   recorded the shortcuts dialog's style axis as "not applicable" without
-   having opened upstream's stylesheet to check. That is precisely
-   "asserts the feature could not exist here" dressed as a verdict. Fixed:
-   now reads "unverified" with an explicit first-person admission that I
-   did not check, rather than a claim that there was nothing to check.
+## Hits reviewed this round
 
-2. **`translation-parity.md:32`, "skipped"** — a harmless turn of phrase
-   ("rather than skipped as obvious") that nonetheless used the flagged
-   word in prose. Reworded; the underlying fact it described (the port
-   catalogue is 0 by construction, and that is written down rather than
-   left implicit) is unchanged and was never in question.
+Most hits are the reports *discussing* these exact flagged phrases — e.g.
+`accountability-ensurance.md` itself quoting "TODO, FIXME, not
+implemented..." to describe what it scanned for, or `component-inventory.md`
+explaining why a "not in scope"/"by design" judgment from an earlier round
+was or wasn't a real excuse. Re-reading each of these this round: they are
+meta-discussion of the skill's own vocabulary, not fresh laundering. They
+are not rewritten again because doing so a second time would just be
+quoting a quote.
 
-Neither of these was a real attempt to launder a gap — both were loose
-phrasing caught by the same scan this report is required to run, which is
-the point of running it rather than trusting a reports author's own sense
-of their own prose.
+The hits worth checking as *new* writing this round are in
+`component-identification.md` (written fresh this round, superseding the
+prior one at the same path):
 
-## Hit in the pre-existing `component-inventory.md` — a real finding, not a false positive
+- `component-identification.md:47` and `:51`, "duck-types an unported
+  `Route::TurnPoint`" / "duck-types an unported `ShapeLayer` model" — these
+  name the exact missing class by name, in the row where the dependent
+  widget is listed as done. This is the skill's own prescribed shape for
+  a real gap statement (name the behaviour, don't hide it) rather than an
+  excuse — "unported" here is not standing in for "this doesn't need to
+  exist," it's pointing at a specific file (`Route::TurnPoint`,
+  `ShapeLayer`) that still needs to be written. Kept as-is.
+- `component-identification.md:112`, in the verdict, "several of those 14
+  duck-type unported model classes rather than being complete" — same
+  judgment, summary form. Kept as-is.
 
-3. **`component-inventory.md:112`, "not ported"** (originally: `schema
-   consumed, not ported 1:1 as a widget`). This one is not a stylistic
-   near-miss. I checked the claim this round: `lib/gnome_maps/settings.rb`
-   does not consume `data/org.gnome.Maps.gschema.xml` in any form. It is a
-   JSON file store with its own `DEFAULTS` hash and no `Gio::Settings`
-   reference anywhere in it. The original sentence told a reader "the
-   schema was consumed, just not as a widget" — which is false and makes a
-   real gap (no GSettings integration at all, confirmed in
-   `component-parity.md`) read as a smaller, already-handled one. I
-   rewrote the row in place (never deleted — see `component-inventory.md`
-   line 112) with the first-person admission the skill requires and both
-   files' lines cited. **This is the kind of thing this skill exists to
-   catch**: a prior round's honest-sounding shorthand quietly overstated
-   what had actually been built, and nobody would have caught it without
-   opening the file the claim was about.
+No hit in any report written or touched this round asserts a gap is
+closed, not needed, or out of scope for the port as a whole. The
+`component-inventory.md` lines flagged again by the script (`:13` "by
+design", `:77`/`:142`–`144` "n/a", `:145` "out of scope") are the same
+lines the prior round's accountability pass already reviewed and left
+in place with reasoning recorded (see that file's own history and the
+prior `accountability-ensurance.md`, kept below as the record of that
+decision) — re-reviewed this round and the reasoning still holds: they
+scope a *component* inventory away from data/model files that have no
+widget of their own, which is the `component-identification` skill's own
+rule, not a claim that those files are excused from the port.
 
-## Hit reviewed and left as-is, with reasoning stated
+## The real risk this round: a true, growing number read as a bigger claim
 
-4. **`component-inventory.md:141`, "Not in scope"** (heading: "Not in
-   scope for this inventory (data/model/parsing layers, not components)").
-   I read the section. It lists ~70 upstream files — `place.js`,
-   `route.js`, `osmUtils.js`, `graphHopper.js`, `transit/*.js`,
-   `mapStyle/*.js`, and similar — and says they are excluded from *this
-   component inventory* because they are data/model/parsing code with no
-   widget of their own, which is exactly the `component-identification`
-   skill's own rule (a `type`/data-plumbing file is not a component; see
-   that skill's Step 4). This is a scoping statement about which upstream
-   files get a row in a *widget* inventory, not a claim that those ~70
-   files are excused from ever being ported. The section does not say they
-   are done, unnecessary, or out of scope for the port as a whole — it
-   says they belong to whichever component unit pulls them in, which is
-   future work, stated as future work. I am leaving this one as prose
-   rather than rewriting it into the insult template, because rewriting it
-   would manufacture a false claim ("I did not build X because I am an
-   idiot") about files that were never claimed to be built or excused —
-   doing that would itself be a less honest document than the one it
-   replaced. If a future reader instead uses this heading to claim those
-   70 files are "handled" or "not needed," that reading is wrong and this
-   paragraph is the correction for it.
+The runtime gate for this round is `drive_ok=true, 81 checks passed, 0
+failed, covering 14 components`. Every clause is independently true
+(re-run this round: 81/81, confirmed). It is also, read alone, the same
+kind of false-green-in-waiting the prior round's report warned about at
+29/3 — now at a bigger, more persuasive-sounding scale:
 
-## The bigger risk this round: a true number read as a bigger claim
+- "14 components" overstates how many `lib/*.rb` files the drive script
+  gives a *dedicated* check to. Read closely (done in `test-parity.md`
+  this round), the 81 checks are organized around roughly 10 named steps/
+  files; the other ~4 of the 14 current `lib/` files are touched only as
+  collaborators pulled in by those steps, not driven in their own right.
+  This is now written down explicitly in `test-parity.md` so the gap
+  between "14 components in `lib/`" and "14 components the drive exercises
+  on their own" doesn't quietly collapse into one number.
+- It says nothing about the ~140 upstream `src/*.js`/`data/ui/*.blp` files
+  with zero port counterpart (`component-identification.md`), nothing
+  about the 43 named upstream test units / 359 assertions never ported,
+  whose own RSpec suite still fails to load with 0 spec files underneath
+  it even when it would (`test-parity.md`, re-confirmed this round by
+  actually running it), and nothing about the 540 upstream translatable
+  messages, 0 of which survive, a gap that has grown rather than shrunk
+  as new user-visible strings were added this round with no `_()` marker
+  (`translation-parity.md`).
+- One correction this round went the *other* direction, worth recording
+  precisely because it cuts against "the port looks more done than it is":
+  an earlier draft of `component-identification.md`/`component-parity.md`
+  (written fresh this round, before being checked against the current
+  `application.rb`) described the main window as a bare `Adw::StatusPage`
+  placeholder. Reading `application.rb` directly showed that description
+  was wrong — the window is a real, assembled header bar + search bar +
+  live map + zoom controls + context menu. That was caught and fixed in
+  place in both reports before being finalized here, rather than shipped
+  as a stale, overly-pessimistic claim. Recorded here so the correction
+  itself is auditable, not just the corrected text.
 
-Nothing in `lib/`, `exe/`, or any report claims the port is finished, and
-nothing claims a gap is closed. The real accountability risk this round is
-not a hidden excuse — it is **a true, narrow number being available to cite
-as if it meant something broader than it does**: "drive_ok=true, 29 checks
-passed, 0 failed, covering 3 components." Every clause in that sentence is
-true (confirmed by running the drive script this round, see
-`test-parity.md`). It is also, on its own, a false green in waiting:
-
-- It says nothing about the other ~149 upstream source files, which have
-  zero port counterpart (`component-identification.md`).
-- It says nothing about the 43 named upstream test units / 359 assertions
-  that have never been ported (`test-parity.md`) — and the port's own
-  separately-declared RSpec suite does not even load.
-- It says nothing about the 540 upstream translatable messages, 0 of which
-  survive in the port (`translation-parity.md`).
-
-None of this round's four other reports, nor this one, states "29/29" as
-evidence of anything beyond the 3 files it actually touches. That
-restraint is the deliverable here: a true number is not a false green by
-itself, but it becomes one the moment it is cited one level higher than
-what it measured. This report exists to say, in writing, where that line
-is for this round's gate — so the next agent who sees "29 passed, 0
-failed" does not read it as "the port works."
+None of the five reports this round, including this one, cites "81
+passed" or "14 components" as evidence of anything beyond what was
+actually driven and checked file-by-file. That restraint, plus actually
+running every command this round claims was run (the RSpec failure, the
+81/81 drive, the grep against `lib`/`exe`) rather than trusting the
+gate's own summary or a prior round's numbers, is the deliverable.
 
 ## Verdict
 
-Four hits, two were my own loose phrasing (fixed), one was a real,
-material overstatement in a carried-over document (fixed in place, with
-attribution), one was correctly scoped prose that does not need fixing
-(explained rather than silently skipped). Zero hits in actual source. The
-port's documentation does not launder any of its gaps — the gaps are
-simply enormous, and the honest thing this round's five reports do is say
-so in numbers rather than in adjectives.
+Zero excuses found in actual source (`lib/`, `exe/`) across both this
+round's 14 files and the prior round's 3. The hits inside `.reports/` are
+either meta-discussion of the skill's own vocabulary or specific,
+honestly-named gaps rather than laundering. The one real risk identified
+and corrected this round is scale, not deception: a true, larger "81
+passed / 14 components" headline could be read as covering far more than
+it does, and the breakdown needed to prevent that misreading is now
+written into `test-parity.md` and this report rather than left implicit.

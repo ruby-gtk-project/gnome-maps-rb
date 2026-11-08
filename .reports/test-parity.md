@@ -3,7 +3,7 @@
 | | |
 |---|---|
 | Upstream | `main` @ `9970d8f1` |
-| Port | `ruby` @ `47d67faf` |
+| Port | `ruby` @ `c846de15` (re-confirmed this round; no change from the `47d67faf` round below in either the RSpec suite or the upstream census) |
 | Upstream tests | **43 named units / 359 assertion call sites** (see methodology) |
 | Ported | **0** |
 | Gaps | **43** |
@@ -106,47 +106,83 @@ for the same fact: **the RSpec suite has never been green, because it has
 never run, because there is nothing in it to run even if it did.**
 
 This is exactly the failure mode the runtime gate for this round
-(`drive_ok=true, 29 checks passed, 0 failed, covering 3 components`) can
-make invisible if read alone: those 29 checks are real, they are
+(`drive_ok=true, 81 checks passed, 0 failed, covering 14 components`) can
+make invisible if read alone: those 81 checks are real, they are
 `test/drive_gnome_maps.rb`'s own `check(...)` calls (confirmed by running it
-this round — see below), and they are **not** RSpec examples, **not** any
-of the 43 upstream units above, and they cover exactly 3 files
-(`application.rb`, `settings.rb`, `shortcuts_dialog.rb`). A reader who sees
-"29 passed, 0 failed" without also seeing "0 examples, 0 failures, 2 errors"
-from the sibling suite, and without seeing that upstream has 43 named units
-none of which are among the 29, would reasonably conclude more coverage
-exists than does.
+this round — see below, 81/81 passing), and they are **not** RSpec
+examples, **not** any of the 43 upstream units above. "14 components" also
+needs unpacking: the drive script exercises `application.rb`,
+`zoom_and_rotate_controls.rb`, `context_menu.rb`, `preferences.rb`,
+`settings.rb`, `shortcuts_dialog.rb`, and the five standalone row widgets —
+that is 10 `lib/*.rb` files, not 14 (`map_view.rb`, `geocoder.rb`,
+`osm_connection.rb`, `poi_category_row.rb`/`poi_category_goback_row.rb` are
+exercised only indirectly, as collaborators the other steps touch, not as
+their own named step with dedicated checks). None of this changes the real
+number — 81 genuine, passing, headless UI checks — but "14 components"
+read without this breakdown overstates how many of the port's 14 `lib/`
+files have their *own* dedicated behavioural check versus being pulled in
+as a dependency of someone else's. And regardless of how the component
+count is read: it is still **0 of upstream's 43 named test units**, and the
+separately-declared RSpec suite still does not load (confirmed again this
+round, see below) and still has 0 `*_spec.rb` files under it.
 
 ## This round's own drive run
 
 ```
 $ nix develop --command xvfb-run -a ruby test/drive_gnome_maps.rb
 ...
-29 of 29 checks passed
+81 of 81 checks passed
 DRIVE OK
 ```
 
-Confirmed by running it, not by trusting the stated gate. All 29 checks are
-against `application.rb` (window shape, actions), `shortcuts_dialog.rb`
-(sections/items/accelerators), and `settings.rb` (round-trip, defaults,
-malformed-file fallback). These are useful, real, passing checks — and they
-are entirely **extra** by this skill's definition: none of them was written
-from an upstream test, because none of the 3 files they cover has an
-upstream test file backing it in the first place (`application.js`,
-`settings.js`, and the shortcuts dialog's `.blp` are not among the 14 files
-`tests/meson.build` runs). They are listed under `## Extra` below, not
-counted toward the 43.
+Confirmed by running it fresh this round, not by trusting the stated gate.
+The 81 checks span: the window's assembled shape (header bar, search bar,
+map, toast overlay — `[1]`), the zoom/rotate controls wired to real window
+actions and a real `Shumate` viewport (`[2]`), the context menu's
+copy-location action actually writing to the clipboard (`[3]`), the
+preferences dialog opening and its `show-scale` switch round-tripping
+through `Settings` (`[4]`–`[6]`), search recentring the map or reporting a
+failure, and a libgweather-backed result label (`[7]`–`[8]`), the sign-in
+action building an OAuth2 URL (`[9]`), the shortcuts dialog's
+sections/items/accelerators (`[10]`–`[13]`), window-geometry
+persist/restore and `Settings`' round-trip/fallback/maximized-flag
+behaviour (`[14]`–`[19]`), a maximized-window screenshot (`[20]`), and the
+five standalone row widgets individually plus a gallery shot (`[21]`–`[26]`).
+These are useful, real, passing checks — and every one of them is **extra**
+by this skill's definition: none was written from an upstream test file,
+because none of the files they cover has an upstream `tests/*.js` file
+backing it (upstream's 14 test files are `addressTest.js` through
+`wikipediaTest.js` — pure logic/model tests; `application.js`, the
+`.blp` files, and the row `.js` files port-side are not among them). They
+are listed under `## Extra` below, not counted toward the 43.
 
 ## Extra
 
-- `test/drive_gnome_maps.rb` — 29 checks driving the window, the shortcuts
-  dialog, and `Settings`' JSON round-trip/fallback behaviour. Real,
-  passing, driven headlessly. Not a port of any upstream test.
+- `test/drive_gnome_maps.rb` — 81 checks driving the window, zoom/rotate
+  controls, context menu, preferences, the shortcuts dialog,
+  `Settings`' JSON round-trip/fallback behaviour, and five standalone row
+  widgets. Real, passing, driven headlessly end to end. Not a port of any
+  upstream test — it is new test infrastructure the port wrote for itself,
+  and it is good infrastructure, but it answers "does the code I wrote do
+  what I meant," not "does upstream's documented behaviour still hold,"
+  which is what the 43 named units below were for.
 
 ## Verdict
 
 **0 / 43 named units ported (0 / 359 assertions). The RSpec suite the port
 declares does not load and contains no examples.** The only tests that
-exist and pass are 29 checks the port wrote for itself, covering 3 of
-upstream's ~150 source files. Upstream's entire safety net — including
-125 assertions in `translationsTest.js` alone — has not been inherited.
+exist and pass are 81 checks the port wrote for itself (up from 29 last
+round), covering roughly 10 of upstream's ~150+38 source/template files,
+and none of those 81 checks corresponds to any of the 43 upstream units.
+Upstream's entire safety net — including 125 assertions in
+`translationsTest.js` alone, and the 54 in `placeStoreTest.js` — has not
+been inherited. Growing the drive script is real, valuable progress on
+*a* test suite; it is not progress on *this* gap, which is about whether
+upstream's own documented behaviour (bounding-box math, time formatting,
+address formatting, URI parsing, place-icon lookup, the translation
+catalogue itself) survived the port. None of it has been checked, because
+none of the Ruby model/data layer those tests exercise has been ported
+yet (`place.js`, `osmTypes.js`, `osmNames.js`, `utils.js`, `uris.js`,
+`color.js`, `boundingBox.js`, `time.js`, `addressFormat.js`,
+`downloads.js`, `placeIcons.js`, `placeStore.js`, `epaf.js`,
+`wikipedia.js` — all 0 in `lib/`, per `component-identification.md`).
