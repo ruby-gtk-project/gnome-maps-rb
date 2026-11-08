@@ -1,5 +1,6 @@
 # frozen_string_literal: true
 
+require_relative "gnome_maps/bounding_box"
 require_relative "gnome_maps/settings"
 require_relative "gnome_maps/shortcuts_dialog"
 require_relative "gnome_maps/poi_category_goback_row"

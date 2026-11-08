@@ -19,9 +19,18 @@ rescue LoadError => error
   raise error unless error.message.include?("kettle")
 end
 
-# External RSpec & related config
-require "kettle/test/rspec"
-# `kettle/test/rspec` installs harness helpers documented in spec/README.md.
+# External RSpec & related config.
+# `kettle/test/rspec` installs harness helpers documented in spec/README.md,
+# but it is a development dependency that the dev shell (flake.nix) does not
+# currently carry — only plain `pkgs.rubyPackages_3_4.rspec` is on the path.
+# Fall back to configuring plain RSpec directly so the suite still loads.
+begin
+  require "kettle/test/rspec"
+rescue LoadError => error
+  raise error unless error.message.include?("kettle")
+
+  require "rspec"
+end
 
 # This library
 require "gnome/maps/rb"
